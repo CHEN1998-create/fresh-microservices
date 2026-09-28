@@ -1,5 +1,7 @@
-// 管理端同样统一走 API Gateway（默认 http://localhost:4000/api）
-export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000/api';
+// 走相对路径 /api/*，由 Next.js server rewrites 反代到 API Gateway
+// 本地：rewrites 默认转发到 http://localhost:4000/api
+// 部署：rewrites 由 API_GATEWAY_URL 环境变量指定网关公网域名
+export const API_BASE = '/api';
 
 export interface User {
   id: string;
