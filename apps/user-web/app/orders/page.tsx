@@ -12,7 +12,7 @@ function OrdersContent() {
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [error, setError] = useState('');
 
-  useEffect(() => {
+  const load = () => {
     if (!getToken()) {
       setError('请先登录后查看订单');
       setOrders([]);
@@ -21,7 +21,22 @@ function OrdersContent() {
     apiFetch<Order[]>('/orders/my')
       .then(setOrders)
       .catch((err) => setError(err instanceof Error ? err.message : '加载失败'));
+  };
+
+  useEffect(() => {
+    load();
   }, []);
+
+  const cancelOrder = async (order: Order) => {
+    if (!window.confirm(`确认取消订单 ${order.id}？库存将回补。`)) return;
+    setError('');
+    try {
+      await apiFetch(`/orders/${order.id}/cancel`, { method: 'POST' });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '取消失败');
+    }
+  };
 
   if (error) {
     return (
@@ -83,7 +98,18 @@ function OrdersContent() {
                   </div>
                 ))}
               </div>
-              <div className="flex justify-end border-t border-gray-100 pt-3 text-sm">
+              <div className="flex items-center justify-between border-t border-gray-100 pt-3 text-sm">
+                <button
+                  onClick={() => cancelOrder(order)}
+                  className={`rounded-lg px-3 py-1 text-xs ${
+                    order.status === 'created'
+                      ? 'border border-gray-300 text-gray-600 hover:bg-gray-50'
+                      : 'border border-gray-200 text-gray-300'
+                  }`}
+                  disabled={order.status !== 'created'}
+                >
+                  取消订单
+                </button>
                 合计：<span className="ml-2 font-bold text-orange-600">{formatYuan(order.totalAmountCents)}</span>
               </div>
             </div>

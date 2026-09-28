@@ -17,11 +17,27 @@ export default function OrdersAdminPage() {
   const [filter, setFilter] = useState('all');
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = () => {
     apiFetch<Order[]>('/admin/orders')
       .then(setOrders)
       .catch((err) => setError(err instanceof Error ? err.message : '加载失败（需要管理员登录）'));
+  };
+
+  useEffect(() => {
+    load();
   }, []);
+
+  const actOnOrder = async (order: Order, action: 'cancel' | 'complete') => {
+    const verb = action === 'cancel' ? '取消' : '标记完成';
+    if (!window.confirm(`确认${verb}订单 ${order.id}？${action === 'cancel' ? ' 库存将回补。' : ''}`)) return;
+    setError('');
+    try {
+      await apiFetch(`/admin/orders/${order.id}/${action}`, { method: 'POST' });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `${verb}失败`);
+    }
+  };
 
   if (error) {
     return (
@@ -103,6 +119,22 @@ export default function OrdersAdminPage() {
                             </li>
                           ))}
                         </ul>
+                        {o.status === 'created' && (
+                          <div className="mt-3 flex gap-2">
+                            <button
+                              onClick={() => actOnOrder(o, 'complete')}
+                              className="rounded-lg bg-brand px-3 py-1 text-xs font-medium text-white hover:bg-brand-dark"
+                            >
+                              标记完成
+                            </button>
+                            <button
+                              onClick={() => actOnOrder(o, 'cancel')}
+                              className="rounded-lg border border-red-300 px-3 py-1 text-xs text-red-600 hover:bg-red-50"
+                            >
+                              取消订单
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   )}

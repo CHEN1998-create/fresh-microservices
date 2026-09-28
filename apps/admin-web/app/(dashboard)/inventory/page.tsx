@@ -77,14 +77,22 @@ export default function InventoryAdminPage() {
               </tr>
             </thead>
             <tbody>
-              {inventory.map((item) => (
+              {inventory.map((item) => {
+                const product = products.find((p) => p.id === item.productId);
+                const deleted = product?.status === 'deleted';
+                return (
                 <tr
                   key={item.productId}
-                  className={`border-t border-gray-100 ${item.lowStock ? 'bg-orange-50/50' : ''}`}
+                  className={`border-t border-gray-100 ${item.lowStock ? 'bg-orange-50/50' : ''} ${deleted ? 'opacity-50' : ''}`}
                 >
                   <td className="px-4 py-3">
                     <span className="mr-2">{productEmoji(item.productId)}</span>
                     {productName(item.productId)}
+                    {deleted && (
+                      <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-600">
+                        已删除
+                      </span>
+                    )}
                     <span className="ml-2 text-xs text-gray-400">{item.productId}</span>
                   </td>
                   <td className="px-4 py-3 font-medium">{item.availableQuantity}</td>
@@ -119,7 +127,8 @@ export default function InventoryAdminPage() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
