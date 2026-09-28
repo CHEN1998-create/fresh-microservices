@@ -23,8 +23,10 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3001
 ENV HOSTNAME=0.0.0.0
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./apps/admin-web/.next/static
+# monorepo 中 next build 在 workspace 目录执行，产物位于 apps/admin-web/.next
+# standalone 内部保留 monorepo 结构（apps/admin-web/server.js）
+COPY --from=builder /app/apps/admin-web/.next/standalone ./
+COPY --from=builder /app/apps/admin-web/.next/static ./apps/admin-web/.next/static
 WORKDIR /app/apps/admin-web
 EXPOSE 3001
 CMD ["node", "server.js"]
