@@ -17,7 +17,8 @@ services:
     restart: always
     environment:
       POSTGRES_USER: fresh
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # :? 表示必填且不能为空：缺失时 compose 直接报错退出，避免容器崩溃重启
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请先 cp .env.example .env 并填入 POSTGRES_PASSWORD}
       POSTGRES_DB: fresh
     volumes:
       - fresh-pgdata:/var/lib/postgresql/data
@@ -33,8 +34,8 @@ services:
     restart: always
     environment:
       PORT: "4001"
-      JWT_SECRET: ${JWT_SECRET}
-      DATABASE_URL: postgres://fresh:${POSTGRES_PASSWORD}@postgres:5432/fresh
+      JWT_SECRET: ${JWT_SECRET:?请先 cp .env.example .env 并填入 JWT_SECRET}
+      DATABASE_URL: postgres://fresh:${POSTGRES_PASSWORD:?缺少 POSTGRES_PASSWORD}@postgres:5432/fresh
     depends_on:
       postgres:
         condition: service_healthy
@@ -71,7 +72,7 @@ services:
     restart: always
     environment:
       PORT: "4000"
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET:?缺少 JWT_SECRET}
       AUTH_SERVICE_URL: http://auth-service:4001
       CATALOG_SERVICE_URL: http://catalog-service:4002
       INVENTORY_SERVICE_URL: http://inventory-service:4003
@@ -87,8 +88,11 @@ services:
     build:
       context: .
       dockerfile: apps/user-web/Dockerfile
+      args:
+        API_GATEWAY_URL: http://api-gateway:4000
     restart: always
     environment:
+      # 实际反代目标在镜像构建期固化（见 Dockerfile ARG），此变量仅为兼容保留
       API_GATEWAY_URL: http://api-gateway:4000
     ports:
       - "3000:3000"
@@ -100,8 +104,11 @@ services:
     build:
       context: .
       dockerfile: apps/admin-web/Dockerfile
+      args:
+        API_GATEWAY_URL: http://api-gateway:4000
     restart: always
     environment:
+      # 实际反代目标在镜像构建期固化（见 Dockerfile ARG），此变量仅为兼容保留
       API_GATEWAY_URL: http://api-gateway:4000
     ports:
       - "3001:3001"

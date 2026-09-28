@@ -13,6 +13,10 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+# rewrites() 在 next build 时执行并固化，网关地址必须在构建期注入
+# 默认值即生产 compose 的内网服务名，本地源码构建也可直接使用
+ARG API_GATEWAY_URL=http://api-gateway:4000
+ENV API_GATEWAY_URL=${API_GATEWAY_URL}
 RUN npm run build -w @fresh/user-web
 
 # standalone 产物保留 monorepo 结构：apps/user-web/server.js

@@ -42,12 +42,15 @@ jobs:
             context: services/api-gateway
             dockerfile: services/api-gateway/Dockerfile
           # 前端是 npm workspaces monorepo，构建上下文必须是仓库根
+          # rewrites 在构建期固化，需把网关内网地址作为 build-arg 传入
           - image: fresh-user-web
             context: .
             dockerfile: apps/user-web/Dockerfile
+            build_args: API_GATEWAY_URL=http://api-gateway:4000
           - image: fresh-admin-web
             context: .
             dockerfile: apps/admin-web/Dockerfile
+            build_args: API_GATEWAY_URL=http://api-gateway:4000
 
     permissions:
       contents: read
@@ -82,6 +85,7 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
+          build-args: ${{ matrix.build_args }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
