@@ -12,7 +12,7 @@ export interface Product {
   name: string;
   category: string;
   priceCents: number;
-  status: 'on' | 'off';
+  status: 'on' | 'off' | 'deleted';
   emoji: string;
   description: string;
 }

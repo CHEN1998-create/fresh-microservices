@@ -39,6 +39,34 @@ export default function ProductsAdminPage() {
     }
   };
 
+  // 软删除：仅对已下架商品启用，二次确认后调用 DELETE
+  const deleteProduct = async (p: Product) => {
+    if (!window.confirm(`确认删除商品「${p.name}」？\n删除后对用户不可见，订单历史引用不受影响；可通过"恢复"重新上架。`)) {
+      return;
+    }
+    setError('');
+    try {
+      await apiFetch(`/admin/products/${p.id}`, { method: 'DELETE' });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '操作失败（需要管理员登录）');
+    }
+  };
+
+  // 恢复已删除商品
+  const restoreProduct = async (p: Product) => {
+    setError('');
+    try {
+      await apiFetch(`/admin/products/${p.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'on' }),
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '操作失败（需要管理员登录）');
+    }
+  };
+
   const savePrice = async (p: Product, priceYuan: string) => {
     const priceCents = Math.round(Number(priceYuan) * 100);
     if (!Number.isInteger(priceCents) || priceCents <= 0) {
@@ -125,35 +153,74 @@ export default function ProductsAdminPage() {
               </tr>
             </thead>
             <tbody>
-              {products.map((p) => (
-                <tr key={p.id} className="border-t border-gray-100">
+              {products.map((p) => {
+                const deleted = p.status === 'deleted';
+                return (
+                <tr key={p.id} className={`border-t border-gray-100 ${deleted ? 'opacity-50' : ''}`}>
                   <td className="px-4 py-3">
                     <span className="mr-2">{p.emoji}</span>
                     {p.name}
                   </td>
                   <td className="px-4 py-3 text-gray-500">{p.category}</td>
                   <td className="px-4 py-3">
-                    <PriceInput initial={formatYuan(p.priceCents).slice(1)} onSave={(v) => savePrice(p, v)} />
+                    {deleted ? (
+                      <span className="text-xs text-gray-400">¥{formatYuan(p.priceCents).slice(1)}</span>
+                    ) : (
+                      <PriceInput initial={formatYuan(p.priceCents).slice(1)} onSave={(v) => savePrice(p, v)} />
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <span
                       className={`rounded-full px-2.5 py-0.5 text-xs ${
-                        p.status === 'on' ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'
+                        p.status === 'on'
+                          ? 'bg-green-100 text-green-700'
+                          : p.status === 'off'
+                            ? 'bg-gray-200 text-gray-500'
+                            : 'bg-red-100 text-red-600'
                       }`}
                     >
-                      {p.status === 'on' ? '在售' : '已下架'}
+                      {p.status === 'on' ? '在售' : p.status === 'off' ? '已下架' : '已删除'}
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => toggleStatus(p)}
-                      className="rounded-lg border border-gray-300 px-3 py-1 text-xs hover:bg-gray-50"
-                    >
-                      {p.status === 'on' ? '下架' : '上架'}
-                    </button>
+                    <div className="flex gap-2">
+                      {p.status === 'on' && (
+                        <button
+                          onClick={() => toggleStatus(p)}
+                          className="rounded-lg border border-gray-300 px-3 py-1 text-xs hover:bg-gray-50"
+                        >
+                          下架
+                        </button>
+                      )}
+                      {p.status === 'off' && (
+                        <>
+                          <button
+                            onClick={() => toggleStatus(p)}
+                            className="rounded-lg border border-gray-300 px-3 py-1 text-xs hover:bg-gray-50"
+                          >
+                            上架
+                          </button>
+                          <button
+                            onClick={() => deleteProduct(p)}
+                            className="rounded-lg border border-red-300 px-3 py-1 text-xs text-red-600 hover:bg-red-50"
+                          >
+                            删除
+                          </button>
+                        </>
+                      )}
+                      {deleted && (
+                        <button
+                          onClick={() => restoreProduct(p)}
+                          className="rounded-lg border border-brand px-3 py-1 text-xs text-brand hover:bg-brand-light"
+                        >
+                          恢复
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

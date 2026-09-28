@@ -92,9 +92,15 @@ app.get('/products', (req, res) => {
 });
 
 // 商品详情
+// 已删除商品对非管理员返回 404；管理员可通过 ?all=true 查看（用于后台审计）
 app.get('/products/:id', (req, res) => {
   const product = products.find((p) => p.id === req.params.id);
   if (!product) return fail(res, 404, '商品不存在');
+  const isAdmin = req.header('x-user-role') === 'admin';
+  const showAll = req.query.all === 'true' && isAdmin;
+  if (product.status === 'deleted' && !showAll) {
+    return fail(res, 404, '商品不存在');
+  }
   ok(res, product);
 });
 
@@ -138,6 +144,17 @@ app.patch('/admin/products/:id', (req, res) => {
     product.status = status;
   }
   ok(res, product, '商品已更新');
+});
+
+// 管理员删除商品（软删除：status -> 'deleted'）
+// 保留记录用于订单历史引用与审计；恢复可通过 PATCH status='on' 完成
+app.delete('/admin/products/:id', (req, res) => {
+  const product = products.find((p) => p.id === req.params.id);
+  if (!product) return fail(res, 404, '商品不存在');
+  if (product.status === 'deleted') return ok(res, product, '商品已删除'); // 幂等
+  product.status = 'deleted';
+  product.updatedAt = new Date().toISOString();
+  ok(res, product, '商品已删除');
 });
 
 app.use((req, res) => fail(res, 404, '路由不存在'));
