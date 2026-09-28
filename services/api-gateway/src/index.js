@@ -23,7 +23,13 @@ app.get('/health', (req, res) => {
 });
 
 // 校验 JWT，通过后把用户身份注入 x-user-id / x-user-role 供下游使用
-function verifyToken(requiredRole) {
+// requiredRoles: string | string[] | undefined；为数组时任意命中即通过
+function verifyToken(requiredRoles) {
+  const allowed = requiredRoles
+    ? Array.isArray(requiredRoles)
+      ? requiredRoles
+      : [requiredRoles]
+    : null;
   return (req, res, next) => {
     const token = req.headers.authorization?.replace(/^Bearer\s+/i, '');
     if (!token) {
@@ -33,8 +39,12 @@ function verifyToken(requiredRole) {
       const payload = jwt.verify(token, JWT_SECRET);
       req.headers['x-user-id'] = payload.sub;
       req.headers['x-user-role'] = payload.role;
-      if (requiredRole && payload.role !== requiredRole) {
-        return res.status(403).json({ code: 403, data: null, message: '无权限，需要管理员身份' });
+      if (allowed && !allowed.includes(payload.role)) {
+        return res.status(403).json({
+          code: 403,
+          data: null,
+          message: `无权限，需要角色: ${allowed.join(' / ')}`,
+        });
       }
       next();
     } catch {
@@ -51,6 +61,21 @@ function guard(prefixes, verify) {
   };
 }
 
+// 可选鉴权：带 token 就验签并注入身份，不带就匿名放行
+// 用于 catalog 这种"公开读但管理员可见更多"的场景
+function optionalAuth(req, res, next) {
+  const token = req.headers.authorization?.replace(/^Bearer\s+/i, '');
+  if (!token) return next();
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    req.headers['x-user-id'] = payload.sub;
+    req.headers['x-user-role'] = payload.role;
+  } catch {
+    // token 无效就当匿名，不报错（公开接口本就不强制登录）
+  }
+  next();
+}
+
 // 订单：登录用户
 app.use(guard(['/api/orders'], verifyToken()));
 // 管理端：管理员
@@ -61,6 +86,8 @@ app.use(
     req.method === 'GET' ? next() : verifyToken('admin')(req, res, next)
   )
 );
+// catalog：公开读，但若带 token 则注入身份（供 ?all=true 等管理员特性使用）
+app.use(guard(['/api/catalog'], optionalAuth));
 
 // 代理：按完整路径前缀过滤，再重写到下游路由
 function proxy(prefix, target, replaceWith) {

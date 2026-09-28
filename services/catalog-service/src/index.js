@@ -79,11 +79,13 @@ app.get('/health', (req, res) => {
   ok(res, { service: 'catalog-service', status: 'ok', products: products.length });
 });
 
-// 商品列表：?category=&keyword=&all=（管理端可看全部含下架）
+// 商品列表：?category=&keyword=&all=
+// ?all=true 仅对管理员（由 Gateway 注入 x-user-role: admin）生效，普通用户/未登录一律只看在售
 app.get('/products', (req, res) => {
   const { category, keyword, all } = req.query;
+  const isAdmin = req.header('x-user-role') === 'admin';
   let list = [...products];
-  if (all !== 'true') list = list.filter((p) => p.status === 'on');
+  if (all !== 'true' || !isAdmin) list = list.filter((p) => p.status === 'on');
   if (category) list = list.filter((p) => p.category === category);
   if (keyword) list = list.filter((p) => p.name.includes(String(keyword)));
   ok(res, list);
