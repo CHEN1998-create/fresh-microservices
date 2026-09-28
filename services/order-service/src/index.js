@@ -151,7 +151,8 @@ app.get('/orders/:id', (req, res) => {
 });
 
 // 取消订单（用户可取消自己的 created 订单；管理员可取消任意 created 订单）
-// 状态：created -> cancelled；同步调 inventory /restock 把已确认扣减的库存加回
+// 状态：created -> cancelled；先调 inventory /restock 回补库存，成功后才改状态
+// 保证订单与库存强一致：restock 失败则订单仍 created，调用方可重试
 app.post('/orders/:id/cancel', async (req, res) => {
   const order = orders.get(req.params.id);
   if (!order) return fail(res, 404, '订单不存在');
@@ -165,22 +166,27 @@ app.post('/orders/:id/cancel', async (req, res) => {
   if (order.status !== 'created') {
     return fail(res, 400, `仅 created 订单可取消，当前状态：${order.status}`);
   }
+  // 幂等防重：已回补过的订单不允许再触发 restock
+  if (order.restockApplied) {
+    return fail(res, 409, '订单库存已回补，请勿重复取消');
+  }
 
-  order.status = 'cancelled';
-  order.cancelledAt = new Date().toISOString();
-
-  // 库存回补：失败不阻断取消（订单状态优先），仅记录告警
+  // 先回补库存；失败则订单保持 created，调用方可重试
   try {
     const restock = await postJson(`${INVENTORY_URL}/restock`, {
       items: order.items.map(({ productId, quantity }) => ({ productId, quantity })),
     });
     if (!restock.ok) {
-      console.warn(`[order] 订单 ${order.id} 已取消但库存回补失败：${restock.body?.message}`);
+      return fail(res, 503, `库存回补失败，订单未取消：${restock.body?.message || '下游异常'}`);
     }
   } catch (err) {
-    console.warn(`[order] 订单 ${order.id} 库存回补异常：${err.message}`);
+    return fail(res, 503, `库存回补异常，订单未取消：${err.message}`);
   }
 
+  // 库存已回补，安全改状态
+  order.status = 'cancelled';
+  order.cancelledAt = new Date().toISOString();
+  order.restockApplied = true;
   ok(res, order, '订单已取消');
 });
 
