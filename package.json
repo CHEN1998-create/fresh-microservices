@@ -1,0 +1,22 @@
+{
+  "name": "fresh-microservices",
+  "version": "0.1.0",
+  "private": true,
+  "description": "生鲜电商微服务系统（练手项目）：Gateway / Auth / Catalog / Inventory / Order",
+  "workspaces": [
+    "services/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:services": "concurrently -k -n gateway,auth,catalog,inventory,order -c blue,green,cyan,magenta,yellow \"npm run dev -w @fresh/api-gateway\" \"npm run dev -w @fresh/auth-service\" \"npm run dev -w @fresh/catalog-service\" \"npm run dev -w @fresh/inventory-service\" \"npm run dev -w @fresh/order-service\"",
+    "dev:user": "npm run dev -w @fresh/user-web",
+    "dev:admin": "npm run dev -w @fresh/admin-web",
+    "smoke": "node scripts/smoke-test.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
