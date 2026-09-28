@@ -125,6 +125,34 @@ app.post('/release', (req, res) => {
   ok(res, { reservationId }, '库存已回滚');
 });
 
+// 库存回补：取消订单等场景把已确认扣减的库存加回 available
+// 内部接口，由 order-service 直接调用（不经 Gateway）
+app.post('/restock', (req, res) => {
+  const { items: requested } = req.body || {};
+  if (!Array.isArray(requested) || requested.length === 0) {
+    return fail(res, 400, 'items 不能为空');
+  }
+
+  // 先整体校验，任一不满足则全部不补（保持原子性）
+  for (const line of requested) {
+    const qty = Number(line.quantity);
+    if (!Number.isInteger(qty) || qty <= 0) {
+      return fail(res, 400, '数量必须为正整数');
+    }
+    if (!items.has(line.productId)) {
+      return fail(res, 404, `商品 ${line.productId} 无库存记录`);
+    }
+  }
+
+  const lines = requested.map((line) => ({ productId: line.productId, quantity: line.quantity }));
+  for (const line of lines) {
+    const item = items.get(line.productId);
+    item.availableQuantity += line.quantity;
+    item.updatedAt = new Date().toISOString();
+  }
+  ok(res, { items: lines }, '库存已回补');
+});
+
 app.use((req, res) => fail(res, 404, '路由不存在'));
 
 app.listen(PORT, () => {

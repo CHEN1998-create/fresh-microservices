@@ -150,6 +150,57 @@ app.get('/orders/:id', (req, res) => {
   ok(res, order);
 });
 
+// 取消订单（用户可取消自己的 created 订单；管理员可取消任意 created 订单）
+// 状态：created -> cancelled；同步调 inventory /restock 把已确认扣减的库存加回
+app.post('/orders/:id/cancel', async (req, res) => {
+  const order = orders.get(req.params.id);
+  if (!order) return fail(res, 404, '订单不存在');
+
+  const userId = req.header('x-user-id');
+  const role = req.header('x-user-role');
+  if (!userId) return fail(res, 401, '未登录');
+  if (role !== 'admin' && order.userId !== userId) {
+    return fail(res, 403, '无权取消该订单');
+  }
+  if (order.status !== 'created') {
+    return fail(res, 400, `仅 created 订单可取消，当前状态：${order.status}`);
+  }
+
+  order.status = 'cancelled';
+  order.cancelledAt = new Date().toISOString();
+
+  // 库存回补：失败不阻断取消（订单状态优先），仅记录告警
+  try {
+    const restock = await postJson(`${INVENTORY_URL}/restock`, {
+      items: order.items.map(({ productId, quantity }) => ({ productId, quantity })),
+    });
+    if (!restock.ok) {
+      console.warn(`[order] 订单 ${order.id} 已取消但库存回补失败：${restock.body?.message}`);
+    }
+  } catch (err) {
+    console.warn(`[order] 订单 ${order.id} 库存回补异常：${err.message}`);
+  }
+
+  ok(res, order, '订单已取消');
+});
+
+// 标记完成（仅管理员；库存不动，已 confirm）
+// 状态：created -> completed
+app.post('/orders/:id/complete', (req, res) => {
+  const order = orders.get(req.params.id);
+  if (!order) return fail(res, 404, '订单不存在');
+
+  const role = req.header('x-user-role');
+  if (role !== 'admin') return fail(res, 403, '无权限，需要角色: admin');
+  if (order.status !== 'created') {
+    return fail(res, 400, `仅 created 订单可标记完成，当前状态：${order.status}`);
+  }
+
+  order.status = 'completed';
+  order.completedAt = new Date().toISOString();
+  ok(res, order, '订单已完成');
+});
+
 app.use((req, res) => fail(res, 404, '路由不存在'));
 
 app.listen(PORT, () => {
