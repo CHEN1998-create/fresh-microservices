@@ -1,0 +1,90 @@
+# CI：push 到 main 后，构建全部 7 个镜像并推送到 GitHub Container Registry (GHCR)
+# 镜像列表（owner 自动小写）：
+#   ghcr.io/<owner>/fresh-auth / fresh-catalog / fresh-inventory
+#   ghcr.io/<owner>/fresh-order / fresh-gateway / fresh-user-web / fresh-admin-web
+# 标签：latest（main 最新提交）+ sha-<短哈希>（每次提交，便于回滚）
+# 服务器更新：docker compose -f docker-compose.prod.yml pull && up -d
+name: Build and Push Docker Images
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # 支持在 Actions 页面手动触发
+
+# 同一分支连续 push 时，取消进行中的旧构建，节省额度
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # 一个镜像失败不影响其他镜像
+      matrix:
+        include:
+          - image: fresh-auth
+            context: services/auth-service
+            dockerfile: services/auth-service/Dockerfile
+          - image: fresh-catalog
+            context: services/catalog-service
+            dockerfile: services/catalog-service/Dockerfile
+          - image: fresh-inventory
+            context: services/inventory-service
+            dockerfile: services/inventory-service/Dockerfile
+          - image: fresh-order
+            context: services/order-service
+            dockerfile: services/order-service/Dockerfile
+          - image: fresh-gateway
+            context: services/api-gateway
+            dockerfile: services/api-gateway/Dockerfile
+          # 前端是 npm workspaces monorepo，构建上下文必须是仓库根
+          - image: fresh-user-web
+            context: .
+            dockerfile: apps/user-web/Dockerfile
+          - image: fresh-admin-web
+            context: .
+            dockerfile: apps/admin-web/Dockerfile
+
+    permissions:
+      contents: read
+      packages: write # 推送镜像到 GHCR 所需
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }} # Actions 自动签发，无需额外配置 secret
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # metadata-action 会自动将 owner/镜像名转小写，符合 GHCR 规范
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # GitHub Actions 缓存层，二次构建显著提速
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}

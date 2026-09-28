@@ -1,0 +1,112 @@
+# 生产编排：5 个后端服务 + PostgreSQL + 2 个前端，单机部署
+# 使用：
+#   1. cp .env.example .env，填入真实 JWT_SECRET 和 POSTGRES_PASSWORD
+#   2. 服务器登录 GHCR：docker login ghcr.io -u <GitHub用户名>
+#   3. docker compose -f docker-compose.prod.yml pull
+#      docker compose -f docker-compose.prod.yml up -d
+# 访问：
+#   用户端 http://服务器IP:3000   管理端 http://服务器IP:3001
+# 说明：
+#   - image 由 GitHub Actions 构建推送到 GHCR（见 .github/workflows/docker-publish.yml）
+#   - 同时保留 build 配置，本地仍可用 up --build 从源码构建
+#   - 仅两个前端映射宿主机端口；后端与 PostgreSQL 只在 compose 内网通信
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: fresh
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: fresh
+    volumes:
+      - fresh-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fresh -d fresh"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  auth-service:
+    image: ghcr.io/chen1998-create/fresh-auth:latest
+    build: ./services/auth-service
+    restart: always
+    environment:
+      PORT: "4001"
+      JWT_SECRET: ${JWT_SECRET}
+      DATABASE_URL: postgres://fresh:${POSTGRES_PASSWORD}@postgres:5432/fresh
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  catalog-service:
+    image: ghcr.io/chen1998-create/fresh-catalog:latest
+    build: ./services/catalog-service
+    restart: always
+    environment:
+      PORT: "4002"
+
+  inventory-service:
+    image: ghcr.io/chen1998-create/fresh-inventory:latest
+    build: ./services/inventory-service
+    restart: always
+    environment:
+      PORT: "4003"
+
+  order-service:
+    image: ghcr.io/chen1998-create/fresh-order:latest
+    build: ./services/order-service
+    restart: always
+    environment:
+      PORT: "4004"
+      CATALOG_SERVICE_URL: http://catalog-service:4002
+      INVENTORY_SERVICE_URL: http://inventory-service:4003
+    depends_on:
+      - catalog-service
+      - inventory-service
+
+  api-gateway:
+    image: ghcr.io/chen1998-create/fresh-gateway:latest
+    build: ./services/api-gateway
+    restart: always
+    environment:
+      PORT: "4000"
+      JWT_SECRET: ${JWT_SECRET}
+      AUTH_SERVICE_URL: http://auth-service:4001
+      CATALOG_SERVICE_URL: http://catalog-service:4002
+      INVENTORY_SERVICE_URL: http://inventory-service:4003
+      ORDER_SERVICE_URL: http://order-service:4004
+    depends_on:
+      - auth-service
+      - catalog-service
+      - inventory-service
+      - order-service
+
+  user-web:
+    image: ghcr.io/chen1998-create/fresh-user-web:latest
+    build:
+      context: .
+      dockerfile: apps/user-web/Dockerfile
+    restart: always
+    environment:
+      API_GATEWAY_URL: http://api-gateway:4000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api-gateway
+
+  admin-web:
+    image: ghcr.io/chen1998-create/fresh-admin-web:latest
+    build:
+      context: .
+      dockerfile: apps/admin-web/Dockerfile
+    restart: always
+    environment:
+      API_GATEWAY_URL: http://api-gateway:4000
+    ports:
+      - "3001:3001"
+    depends_on:
+      - api-gateway
+
+volumes:
+  fresh-pgdata:
