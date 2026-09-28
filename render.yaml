@@ -1,0 +1,111 @@
+# Render Blueprint：一键部署生鲜电商微服务系统
+# 使用：在 render.com → New → Blueprint → 选本仓库 → 自动读取本文件创建所有 service
+# 部署后只需手动填 JWT_SECRET（Blueprint 会提示），其余全自动
+services:
+  # ---- PostgreSQL 数据库 ----
+  - type: postgres
+    name: fresh-db
+    plan: free
+    ipAllowList: [] # 演示用，允许所有 IP 访问
+
+  # ---- auth-service ----
+  - type: web
+    name: fresh-auth
+    repo: https://github.com/CHEN1998-create/fresh-microservices
+    branch: main
+    rootDir: services/auth-service
+    runtime: docker
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        from: fresh-db.internalDatabaseUrl # 引用上面 postgres 的内网连接串
+      - key: JWT_SECRET
+        sync: false # 部署时手动填（生成命令：openssl rand -hex 32）
+      - key: PORT
+        value: 4001
+
+  # ---- catalog-service ----
+  - type: web
+    name: fresh-catalog
+    repo: https://github.com/CHEN1998-create/fresh-microservices
+    branch: main
+    rootDir: services/catalog-service
+    runtime: docker
+    plan: free
+    envVars:
+      - key: PORT
+        value: 4002
+
+  # ---- inventory-service ----
+  - type: web
+    name: fresh-inventory
+    repo: https://github.com/CHEN1998-create/fresh-microservices
+    branch: main
+    rootDir: services/inventory-service
+    runtime: docker
+    plan: free
+    envVars:
+      - key: PORT
+        value: 4003
+
+  # ---- order-service ----
+  - type: web
+    name: fresh-order
+    repo: https://github.com/CHEN1998-create/fresh-microservices
+    branch: main
+    rootDir: services/order-service
+    runtime: docker
+    plan: free
+    envVars:
+      - key: PORT
+        value: 4004
+      - key: CATALOG_SERVICE_URL
+        value: https://fresh-catalog.onrender.com
+      - key: INVENTORY_SERVICE_URL
+        value: https://fresh-inventory.onrender.com
+
+  # ---- api-gateway ----
+  - type: web
+    name: fresh-gateway
+    repo: https://github.com/CHEN1998-create/fresh-microservices
+    branch: main
+    rootDir: services/api-gateway
+    runtime: docker
+    plan: free
+    envVars:
+      - key: PORT
+        value: 4000
+      - key: JWT_SECRET
+        sync: false # 同 auth-service，填同一个值
+      - key: AUTH_SERVICE_URL
+        value: https://fresh-auth.onrender.com
+      - key: CATALOG_SERVICE_URL
+        value: https://fresh-catalog.onrender.com
+      - key: INVENTORY_SERVICE_URL
+        value: https://fresh-inventory.onrender.com
+      - key: ORDER_SERVICE_URL
+        value: https://fresh-order.onrender.com
+
+  # ---- user-web ----
+  - type: web
+    name: fresh-user-web
+    repo: https://github.com/CHEN1998-create/fresh-microservices
+    branch: main
+    rootDir: apps/user-web
+    runtime: docker
+    plan: free
+    envVars:
+      - key: API_GATEWAY_URL
+        value: https://fresh-gateway.onrender.com
+
+  # ---- admin-web ----
+  - type: web
+    name: fresh-admin-web
+    repo: https://github.com/CHEN1998-create/fresh-microservices
+    branch: main
+    rootDir: apps/admin-web
+    runtime: docker
+    plan: free
+    envVars:
+      - key: API_GATEWAY_URL
+        value: https://fresh-gateway.onrender.com
