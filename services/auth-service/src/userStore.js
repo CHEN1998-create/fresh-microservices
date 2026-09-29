@@ -53,6 +53,18 @@ function createMemoryStore() {
 }
 
 // ---- PostgreSQL 实现 ----
+// PG 列名为下划线风格，统一映射为业务层使用的驼峰字段，避免 passwordHash 读到 undefined
+function mapUserRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    email: row.email,
+    passwordHash: row.password_hash,
+    role: row.role,
+    createdAt: row.created_at,
+  };
+}
+
 function createPgStore(pgPool) {
   return {
     async init() {
@@ -77,11 +89,11 @@ function createPgStore(pgPool) {
     },
     async findByEmail(email) {
       const { rows } = await pgPool.query('SELECT * FROM users WHERE email = $1', [email]);
-      return rows[0] ?? null;
+      return mapUserRow(rows[0]);
     },
     async findById(id) {
       const { rows } = await pgPool.query('SELECT * FROM users WHERE id = $1', [id]);
-      return rows[0] ?? null;
+      return mapUserRow(rows[0]);
     },
     async create({ id, email, passwordHash, role }) {
       const { rows } = await pgPool.query(
@@ -90,7 +102,7 @@ function createPgStore(pgPool) {
          RETURNING *`,
         [id, email, passwordHash, role]
       );
-      return rows[0];
+      return mapUserRow(rows[0]);
     },
     async count() {
       const { rows } = await pgPool.query('SELECT COUNT(*)::int AS n FROM users');
