@@ -9,6 +9,9 @@ name: Build and Push Docker Images
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "**.md"
+      - ".trae/**"
   workflow_dispatch: # 支持在 Actions 页面手动触发
 
 # 同一分支连续 push 时，取消进行中的旧构建，节省额度
